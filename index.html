@@ -520,8 +520,8 @@ function makeFlower(r,g,b,velN,noteIdx){
     const mesh=new THREE.Mesh(geo,mat);
     // Placer le pétale : rotation autour de l'axe Y (angle du pétale)
     mesh.rotation.y=angle;
-    // Base du pétale au sommet de la tige
-    mesh.position.y=stemH;
+    // Position Y sera mise à jour dynamiquement dans update()
+    mesh.position.y=0;
     group.add(mesh);
     petalMeshes.push(mesh);
   }
@@ -538,8 +538,8 @@ function makeFlower(r,g,b,velN,noteIdx){
     transparent:true,opacity:1.0
   });
   const pistil=new THREE.Mesh(pistilGeo,pistilMat);
-  pistil.position.y=stemH;
-  pistil.scale.set(1,0,1); // commence écrasé, grandit avec u_grow
+  pistil.position.y=0; // sera mis à jour dans update()
+  pistil.scale.set(1,0,1);
   group.add(pistil);
 
   // ── ÉTAT D'ANIMATION ──────────────────────────────────
@@ -589,6 +589,13 @@ function makeFlower(r,g,b,velN,noteIdx){
     stemMat.uniforms.u_wilt.value=wilt;
     stemMat.uniforms.u_time.value=t;
     stemMat.uniforms.u_alpha.value=alpha;
+    // Hauteur réelle du sommet de la tige (suit la croissance)
+    const currentTip=stemH*Math.min(stemProgress,4); // plafond visuel raisonnable
+    // Flétrissement : le sommet s'affaisse
+    const tipY=currentTip - wilt*currentTip*0.4;
+    // Mettre à jour la position des pétales et du pistil
+    for(const pm of petalMeshes) pm.position.y=tipY;
+    pistil.position.y=tipY;
 
     // ── Feuilles : apparaissent quand la tige est à mi-hauteur ──
     const leafProgress=Math.max(0, Math.min(1, (growT-0.25)/0.4));
@@ -785,13 +792,23 @@ function releaseNote(note){
   synthOff(note);
 }
 
+// Hauteur caméra : pédale = monte au-dessus de la scène
+let camYTarget=2;  // hauteur par défaut
+let camY=2;
+
 function onPedalChange(down){
   const was=pedalDown;pedalDown=down;
   document.getElementById('ped-ind').classList.toggle('on',down);
-  camZoomTarget=down?(1.0+zoomPedalMax):1.0;
-  if(!down&&was){
-    if(rotMode==='pedal') pivot.rotation.y+=Math.PI/4;
-    [...activeNotes.keys()].forEach(n=>releaseNote(n));
+  if(down){
+    camZoomTarget=1.0+zoomPedalMax;
+    camYTarget=8+zoomPedalMax*6; // monte selon le slider zoom
+  } else {
+    camZoomTarget=1.0;
+    camYTarget=2; // redescend à la hauteur normale
+    if(was){
+      if(rotMode==='pedal') pivot.rotation.y+=Math.PI/4;
+      [...activeNotes.keys()].forEach(n=>releaseNote(n));
+    }
   }
 }
 
@@ -824,7 +841,14 @@ function animate(){
   // Zoom caméra
   const lz=1-Math.pow(1-ZOOM_SPEED,dt*60);
   camZoom+=(camZoomTarget-camZoom)*lz;
-  camera.position.setLength(14/camZoom);
+  camY+=(camYTarget-camY)*lz*0.6; // montée plus douce
+  // Recalculer la position caméra avec zoom ET hauteur
+  const camDist=14/camZoom;
+  const camAngleH=pivot.rotation.y; // suit la rotation du pivot pour garder la même vue
+  // Position sur cercle horizontal + hauteur variable
+  const camXZ=Math.sqrt(Math.max(0, camDist*camDist - camY*camY));
+  camera.position.set(camXZ*Math.sin(camAngleH), camY, camXZ*Math.cos(camAngleH));
+  camera.lookAt(0,1,0);
 
   updatePeaks(dt);
 
