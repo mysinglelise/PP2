@@ -1,0 +1,1060 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>Piano Fleurs 3D</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#000;overflow:hidden;font-family:'Courier New',monospace}
+#ui{position:fixed;top:14px;left:14px;z-index:20;display:flex;flex-direction:column;gap:7px;pointer-events:none;transition:opacity .4s;max-height:calc(100vh - 28px);overflow-y:auto;overflow-x:hidden;scrollbar-width:none}
+#ui::-webkit-scrollbar{display:none}
+#ui.hidden{opacity:0;pointer-events:none}
+.panel{background:rgba(0,0,0,0.68);border:0.5px solid rgba(255,255,255,0.13);border-radius:8px;padding:9px 13px;pointer-events:all}
+.ptitle{font-size:9px;letter-spacing:.14em;color:rgba(255,255,255,.28);text-transform:uppercase;margin-bottom:7px}
+.row{display:flex;align-items:center;gap:9px;margin:4px 0}
+label{font-size:11px;color:rgba(255,255,255,.38);min-width:82px}
+select{background:rgba(255,255,255,.06);border:0.5px solid rgba(255,255,255,.16);border-radius:4px;color:rgba(255,255,255,.82);padding:3px 6px;font-size:11px;font-family:inherit;cursor:pointer;outline:none}
+input[type=range]{-webkit-appearance:none;width:88px;height:3px;border-radius:2px;background:rgba(255,255,255,.14);outline:none;cursor:pointer}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:11px;height:11px;border-radius:50%;background:#9b96d4;cursor:pointer}
+.val{font-size:11px;color:rgba(255,255,255,.38);min-width:32px}
+#midi-dot{width:8px;height:8px;border-radius:50%;background:#333;flex-shrink:0;transition:background .4s}
+#midi-dot.on{background:#4dff91;box-shadow:0 0 5px #4dff91}
+#midi-dot.err{background:#ff5555}
+#note-panel{position:fixed;bottom:18px;right:14px;z-index:25;background:rgba(0,0,0,0.68);border:0.5px solid rgba(255,255,255,0.13);border-radius:8px;padding:9px 13px;pointer-events:all;cursor:grab;user-select:none;transition:opacity .4s;min-width:140px}
+#note-panel.hidden{opacity:0;pointer-events:none}
+#note-panel:active{cursor:grabbing}
+#note-panel-title{font-size:9px;letter-spacing:.14em;color:rgba(255,255,255,.28);text-transform:uppercase;margin-bottom:7px}
+#note-log{display:flex;flex-direction:column;gap:3px;max-height:80px;overflow:hidden}
+.nrow{display:flex;align-items:center;gap:7px;font-size:10px}
+.nbadge{width:6px;height:6px;border-radius:50%;flex-shrink:0}
+#learn-body{overflow:hidden;transition:max-height .3s ease,opacity .3s ease}
+#learn-body.collapsed{max-height:0!important;opacity:0}
+#learn-toggle{cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:6px}
+#learn-toggle .ptitle{margin-bottom:0}
+#learn-chevron{font-size:10px;color:rgba(255,255,255,.28);transition:transform .3s;display:inline-block}
+#learn-chevron.open{transform:rotate(180deg)}
+.toggle-group{display:flex;gap:0;border:0.5px solid rgba(255,255,255,.16);border-radius:5px;overflow:hidden}
+.toggle-btn{background:rgba(255,255,255,.04);border:none;color:rgba(255,255,255,.45);padding:4px 10px;font-size:10px;font-family:inherit;cursor:pointer;letter-spacing:.08em;transition:background .2s,color .2s}
+.toggle-btn.active{background:rgba(155,150,212,.25);color:#9b96d4}
+.learn-btn{background:rgba(255,255,255,.06);border:0.5px solid rgba(255,255,255,.16);border-radius:4px;color:rgba(255,255,255,.4);padding:2px 7px;font-size:9px;font-family:inherit;cursor:pointer;letter-spacing:.08em;transition:background .2s,color .2s;white-space:nowrap}
+.learn-btn.waiting{background:rgba(255,80,80,.25);border-color:rgba(255,80,80,.5);color:#ff6060;animation:pulse .8s infinite}
+.learn-btn.mapped{background:rgba(77,255,145,.1);border-color:rgba(77,255,145,.3);color:#4dff91}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
+.map-info{font-size:9px;color:rgba(255,255,255,.25);min-width:60px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#reel-overlay{display:none;position:fixed;pointer-events:none;z-index:10;border:1px solid rgba(255,255,255,0.15);box-shadow:0 0 0 9999px rgba(0,0,0,0.88)}
+#hint{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);text-align:center;color:rgba(255,255,255,.2);font-size:13px;line-height:2.2;pointer-events:none;transition:opacity 1.5s;z-index:5}
+#hint.gone{opacity:0}
+#kbhint{position:fixed;bottom:10px;left:50%;transform:translateX(-50%);font-size:10px;color:rgba(255,255,255,.13);pointer-events:none;z-index:5}
+#ped-ind{position:fixed;bottom:10px;right:14px;font-size:10px;letter-spacing:.1em;pointer-events:none;color:rgba(255,255,255,.15);z-index:5}
+#ped-ind.on{color:#9b96d4}
+#hide-hint{position:fixed;top:14px;right:14px;font-size:10px;color:rgba(255,255,255,.2);pointer-events:none;z-index:5}
+</style>
+</head>
+<body>
+<div id="reel-overlay"></div>
+<div id="ui">
+  <div class="panel">
+    <div class="row" style="gap:8px">
+      <div id="midi-dot"></div>
+      <span id="midi-label" style="font-size:11px;color:rgba(255,255,255,.55)">Connexion MIDI…</span>
+    </div>
+  </div>
+  <div class="panel">
+    <div class="ptitle">Format</div>
+    <div class="row"><label>Mode</label>
+      <div class="toggle-group">
+        <button class="toggle-btn active" id="btn-landscape">⬛ Paysage</button>
+        <button class="toggle-btn" id="btn-reel">▯ Reel</button>
+      </div>
+    </div>
+  </div>
+  <div class="panel">
+    <div id="learn-toggle">
+      <div class="ptitle">MIDI Learn — canal 2 = triggers</div>
+      <span id="learn-chevron">▲</span>
+    </div>
+    <div id="learn-body" class="collapsed" style="max-height:320px">
+      <div style="height:7px"></div>
+      <div class="row" style="gap:6px"><label>Vitesse</label><button class="learn-btn" id="learn-spd">Learn</button><span class="map-info" id="info-spd">—</span></div>
+      <div class="row" style="gap:6px"><label>Durée vie</label><button class="learn-btn" id="learn-life">Learn</button><span class="map-info" id="info-life">—</span></div>
+      <div class="row" style="gap:6px"><label>Taille</label><button class="learn-btn" id="learn-size">Learn</button><span class="map-info" id="info-size">—</span></div>
+      <div class="row" style="gap:6px"><label>Pétales</label><button class="learn-btn" id="learn-petals">Learn</button><span class="map-info" id="info-petals">—</span></div>
+      <div class="row" style="gap:6px"><label>Vitesse rot.</label><button class="learn-btn" id="learn-rotspd">Learn</button><span class="map-info" id="info-rotspd">—</span></div>
+      <div class="row" style="margin-top:6px"><button class="learn-btn" id="learn-clear" style="min-width:100%">✕ Effacer tous les mappings</button></div>
+    </div>
+  </div>
+  <div class="panel">
+    <div class="ptitle">Synthé</div>
+    <div class="row"><label>Son</label>
+      <div class="toggle-group">
+        <button class="toggle-btn" id="btn-synth-off">Muet</button>
+        <button class="toggle-btn active" id="btn-synth-on">Actif</button>
+      </div>
+    </div>
+    <div class="row"><label>Volume</label>
+      <input type="range" id="synth-vol" min="0" max="100" value="60" step="1">
+      <span class="val" id="synth-vol-v">60%</span>
+    </div>
+  </div>
+  <div class="panel">
+    <div class="ptitle">Fleurs</div>
+    <div class="row"><label>Palette</label>
+      <select id="pal-sel">
+        <option value="0">0 – Saturée</option><option value="1">1 – Pastel</option>
+        <option value="2">2 – Chaude</option><option value="3">3 – Vive</option>
+        <option value="4">4 – Bleu-violet</option>
+      </select>
+    </div>
+    <div class="row"><label>Charger palette</label>
+      <label style="cursor:pointer;font-size:10px;color:rgba(255,255,255,.5);border:0.5px solid rgba(255,255,255,.2);border-radius:4px;padding:3px 7px;pointer-events:all" for="pal-file">TSV…</label>
+      <input type="file" id="pal-file" accept=".tsv,.txt" style="display:none">
+      <span id="pal-loaded" style="font-size:10px;color:rgba(255,255,255,.3)"></span>
+    </div>
+    <div class="row"><label>Fond</label>
+      <select id="bg-sel">
+        <option value="0.04,0.04,0.10">Bleu nuit</option>
+        <option value="0,0,0">Noir</option>
+        <option value="0.02,0.06,0.02">Vert sombre</option>
+        <option value="0.96,0.94,0.91">Blanc chaud</option>
+      </select>
+    </div>
+    <div class="row"><label>Vitesse</label>
+      <input type="range" id="spd" min="0" max="100" value="30" step="1">
+      <span class="val" id="spd-v">30%</span>
+    </div>
+    <div class="row"><label>Taille fleur</label>
+      <input type="range" id="size" min="10" max="100" value="50" step="1">
+      <span class="val" id="size-v">50%</span>
+    </div>
+    <div class="row"><label>Nb pétales</label>
+      <input type="range" id="petals" min="3" max="9" value="6" step="1">
+      <span class="val" id="petals-v">6</span>
+    </div>
+    <div class="row"><label>Durée vie</label>
+      <input type="range" id="life" min="2" max="60" value="15" step="1">
+      <span class="val" id="life-v">15s</span>
+    </div>
+    <div class="row"><label>Iridescence</label>
+      <input type="range" id="irid" min="0" max="100" value="60" step="5">
+      <span class="val" id="irid-v">60%</span>
+    </div>
+  </div>
+  <div class="panel">
+    <div class="ptitle">Caméra</div>
+    <div class="row"><label>Rotation</label>
+      <select id="rot-sel">
+        <option value="auto">Automatique</option>
+        <option value="pedal">À la pédale</option>
+        <option value="off">Fixe</option>
+      </select>
+    </div>
+    <div class="row"><label>Vitesse rot.</label>
+      <input type="range" id="rotspd" min="0" max="100" value="8" step="1">
+      <span class="val" id="rotspd-v">8</span>
+    </div>
+    <div class="row"><label>Zoom pédale</label>
+      <input type="range" id="zoom-ped" min="0" max="100" value="0" step="1">
+      <span class="val" id="zoom-ped-v">0%</span>
+    </div>
+    <div class="row"><label>Résolution</label>
+      <select id="res-sel">
+        <option value="256">256 (rapide)</option>
+        <option value="512" selected>512 (normal)</option>
+        <option value="1024">1024 (HD)</option>
+        <option value="2048">2048 (4K)</option>
+      </select>
+    </div>
+  </div>
+</div>
+
+<div id="note-panel">
+  <div id="note-panel-title">Notes jouées</div>
+  <div id="note-log"></div>
+</div>
+
+<div id="hide-hint">Shift+H = UI &nbsp;|&nbsp; N = notes &nbsp;|&nbsp; P = capture</div>
+<div id="hint">Jouez sur votre clavier MIDI<br>
+  <span style="font-size:11px">A S D F G H J K &nbsp;|&nbsp; W E T Y U</span><br>
+  <span style="font-size:10px;opacity:.6">Espace=pédale &nbsp; C=effacer &nbsp; Shift+H=UI &nbsp; N=notes &nbsp; P=capture</span>
+</div>
+<div id="kbhint">A S D F G H J K | W E T Y U | Espace=pédale | C=effacer | Shift+H=UI | N=notes | P=capture</div>
+<div id="ped-ind">PÉDALE</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+/* ══ PALETTES ══════════════════════════════════════════ */
+const PALETTES=[
+  // 0 – Vives & distinctes : rouge, orange, jaune, vert, cyan, bleu, violet, rose…
+  {C:[0,90,55],Cs:[300,85,45],D:[45,95,52],Ds:[20,88,58],E:[185,85,52],F:[340,92,48],Fs:[215,80,58],G:[30,92,55],Gs:[270,82,48],A:[115,88,50],As:[325,88,45],B:[200,85,62]},
+  // 1 – Pastel doux
+  {C:[5,55,80],Cs:[290,48,82],D:[55,52,83],Ds:[30,50,80],E:[200,50,83],F:[350,55,78],Fs:[220,50,83],G:[35,52,82],Gs:[275,48,80],A:[120,52,80],As:[320,52,78],B:[210,55,85]},
+  // 2 – Chaudes terracotta/soleil
+  {C:[8,85,58],Cs:[330,78,52],D:[42,90,55],Ds:[18,82,60],E:[210,72,58],F:[355,88,50],Fs:[228,75,62],G:[38,88,58],Gs:[285,72,52],A:[128,82,55],As:[338,80,48],B:[220,78,65]},
+  // 3 – Néon ultra-saturé
+  {C:[0,100,55],Cs:[285,100,48],D:[55,100,58],Ds:[25,100,62],E:[185,100,58],F:[340,100,48],Fs:[215,100,62],G:[30,100,58],Gs:[270,100,52],A:[120,100,55],As:[320,100,50],B:[205,100,65]},
+  // 4 – Bleu-violet nuit
+  {C:[258,72,52],Cs:[278,78,48],D:[282,68,55],Ds:[292,72,58],E:[302,68,62],F:[318,78,45],Fs:[328,72,65],G:[268,75,55],Gs:[275,68,50],A:[288,72,55],As:[298,78,48],B:[248,82,72]}
+];
+const NOTE_NAMES=['C','Cs','D','Ds','E','F','Fs','G','Gs','A','As','B'];
+const NOTE_MIN=37,NOTE_MAX=97;
+function hsl2rgb(h,s,l){s/=100;l/=100;const a=s*Math.min(l,1-l);const f=n=>{const k=(n+h/30)%12;return l-a*Math.max(-1,Math.min(k-3,9-k,1))};return[f(0),f(8),f(4)];}
+
+/* ══ THREE.JS ══════════════════════════════════════════ */
+const renderer=new THREE.WebGLRenderer({antialias:true,preserveDrawingBuffer:true});
+renderer.setPixelRatio(devicePixelRatio);
+renderer.setSize(innerWidth,innerHeight);
+renderer.shadowMap.enabled=true;
+document.body.appendChild(renderer.domElement);
+
+const scene=new THREE.Scene();
+scene.background=new THREE.Color(0.04,0.04,0.10);
+scene.fog=new THREE.FogExp2(0x050510,0.035);
+
+const camera=new THREE.PerspectiveCamera(55,innerWidth/innerHeight,0.1,200);
+camera.position.set(0,2,14);
+camera.lookAt(0,0,0);
+
+const pivot=new THREE.Group();
+scene.add(pivot);
+
+// Lumières
+scene.add(new THREE.AmbientLight(0xffffff,0.4));
+const dL=new THREE.DirectionalLight(0xfff8ee,1.1);
+dL.position.set(5,12,8);
+dL.castShadow=true;
+scene.add(dL);
+const rL=new THREE.DirectionalLight(0x8866ff,0.4);
+rL.position.set(-8,-3,-10);scene.add(rL);
+const bL=new THREE.DirectionalLight(0x004488,0.3);
+bL.position.set(0,-8,0);scene.add(bL);
+
+/* ══ SHADERS PÉTALES ═══════════════════════════════════
+   Shader spécial pour les pétales :
+   - subsurface scattering simulé (lumière qui transperce)
+   - iridescence (dégradé de couleur selon l'angle de vue)
+   - ondulation animée dans le temps
+══════════════════════════════════════════════════════ */
+const PETAL_VERT=`
+uniform float u_time;
+uniform float u_open;
+uniform float u_wilt;
+uniform float u_petalIdx;
+uniform float u_seed;
+varying vec3 vN;
+varying vec3 vWP;
+varying vec2 vUV;
+varying float vHeight;
+
+void main(){
+  vUV=uv;
+  vHeight=uv.y;
+  vec3 p=position;
+
+  // Etat ferme : petale pointe vers le HAUT (bouton)
+  // Etat ouvert : petale s etale a l horizontale puis se recourbe
+  float closedAngle=-1.2;
+  float openAngle=0.35;
+  float angle=mix(closedAngle, openAngle, u_open);
+  float a=angle*vHeight;
+  float cosA=cos(a), sinA=sin(a);
+  float newY=p.y*cosA - p.z*sinA;
+  float newZ=p.y*sinA + p.z*cosA;
+  p.y=newY; p.z=newZ;
+
+  // Courbure laterale individuelle
+  float sideWarp=sin(u_petalIdx*2.39+u_seed)*0.06*vHeight*vHeight;
+  p.x+=sideWarp;
+
+  // Fletrissement : pointes tombent
+  float wiltDrop=u_wilt*vHeight*vHeight*2.0;
+  p.y-=wiltDrop;
+  float wiltCurl=u_wilt*vHeight*0.5*sin(u_petalIdx*1.7+u_seed);
+  float cwt=cos(wiltCurl), swt=sin(wiltCurl);
+  float tx=p.x*cwt-p.z*swt;
+  float tz=p.x*swt+p.z*cwt;
+  p.x=tx; p.z=tz;
+
+  // Micro-ondulation
+  float wave=sin(u_time*1.8+vHeight*5.0+u_petalIdx*0.9+u_seed)*0.008*vHeight*(1.0-u_wilt);
+  p.z+=wave;
+
+  vN=normalize(normalMatrix*normal);
+  vWP=(modelMatrix*vec4(p,1.)).xyz;
+  gl_Position=projectionMatrix*modelViewMatrix*vec4(p,1.);
+}`
+
+const PETAL_FRAG=`
+uniform float u_time;
+uniform vec3  u_color;
+uniform vec3  u_color2;  // couleur centre (plus claire/chaude)
+uniform float u_irid;
+uniform float u_alpha;
+uniform float u_open;
+varying vec3 vN;
+varying vec3 vWP;
+varying vec2 vUV;
+varying float vHeight;
+
+void main(){
+  vec3 n=normalize(vN);
+  vec3 ld=normalize(vec3(.5,.9,.8));
+  vec3 vd=normalize(cameraPosition-vWP);
+  vec3 hv=normalize(ld+vd);
+
+  // Dégradé centre → pointe
+  vec3 baseCol=mix(u_color2, u_color, smoothstep(0.0,0.7,vHeight));
+
+  // Diffus
+  float diff=max(0.,dot(n,ld))*.6+.4;
+  // Subsurface scattering simulé : lumière qui transperce le pétale
+  float sss=max(0.,dot(-n,ld))*0.35;
+  // Spéculaire soyeux
+  float spec=pow(max(0.,dot(n,hv)),18.)*.4;
+  // Fresnel / iridescence
+  float fr=pow(1.-abs(dot(n,vd)),1.8);
+  vec3 ird=.5+.5*cos(vec3(0,2.094,4.188)+dot(n,vd)*6.+u_time*.3+vHeight*3.);
+
+  vec3 col=baseCol*(diff + sss) + vec3(spec*0.6) + ird*u_irid*fr;
+  col=clamp(col,0.,1.);
+
+  // Transparence sur les bords du pétale (vUV.x = 0..1 sur la largeur)
+  float edgeFade=smoothstep(0.0,0.12,vUV.x)*smoothstep(1.0,0.88,vUV.x);
+  float tipFade=smoothstep(1.0,0.85,vHeight);
+  float alpha=u_alpha*edgeFade*(0.85+tipFade*0.15);
+
+  gl_FragColor=vec4(col,alpha);
+}`;
+
+const STEM_VERT=`
+uniform float u_time;
+uniform float u_grow;   // 0→1 croissance de la tige
+uniform float u_wilt;
+uniform float u_seed;
+varying vec3 vN;
+varying vec3 vWP;
+varying float vH;
+
+void main(){
+  vH=uv.y;
+  vec3 p=position;
+  // La tige pousse vers le haut progressivement
+  p*=vec3(1., u_grow, 1.);
+  // Légère courbure organique
+  float curve=sin(vH*3.14+u_seed)*0.08*(1.-u_wilt*0.5);
+  p.x+=curve*vH;
+  // Courbure de flétrissement : la tige se courbe
+  p.x+=u_wilt*vH*vH*0.6*sin(u_seed);
+  p.z+=u_wilt*vH*vH*0.3*cos(u_seed);
+  vN=normalize(normalMatrix*normal);
+  vWP=(modelMatrix*vec4(p,1.)).xyz;
+  gl_Position=projectionMatrix*modelViewMatrix*vec4(p,1.);
+}`;
+
+const STEM_FRAG=`
+uniform vec3  u_color;
+uniform float u_alpha;
+varying vec3 vN;
+varying vec3 vWP;
+varying float vH;
+void main(){
+  vec3 n=normalize(vN);
+  vec3 ld=normalize(vec3(.5,.9,.8));
+  vec3 vd=normalize(cameraPosition-vWP);
+  float diff=max(0.,dot(n,ld))*.7+.3;
+  float spec=pow(max(0.,dot(normalize(ld+vd),n)),12.)*.25;
+  // Tige : vert au bas, couleur de la note en haut
+  vec3 stemCol=mix(vec3(0.12,0.35,0.08), u_color*0.7+vec3(0.1,0.25,0.05), vH);
+  gl_FragColor=vec4(clamp(stemCol*diff+vec3(spec),0.,1.),u_alpha);
+}`;
+
+/* ══ FABRIQUE DE FLEUR ══════════════════════════════════
+   Crée une fleur 3D procédurale :
+   - une tige courbée
+   - 1-2 feuilles
+   - N pétales en forme de cuillère courbée
+   - un pistil central (sphère)
+   Tout est animé via des uniforms shader.
+══════════════════════════════════════════════════════ */
+function makeFlower(r,g,b,velN,noteIdx){
+  const group=new THREE.Group();
+  pivot.add(group);
+
+  const col=new THREE.Color(r,g,b);
+  // Couleur centre : plus chaude/claire
+  const col2=new THREE.Color(
+    Math.min(1,r*1.4+0.15),
+    Math.min(1,g*1.2+0.1),
+    Math.min(1,b*0.8+0.05)
+  );
+
+  const nPetals=flowerPetals;
+  const stemH=flowerSize*(1.2+velN*0.8); // tige plus haute = note forte
+  const petalL=flowerSize*(0.5+velN*0.6); // pétale plus grand = forte vélocité
+  const petalW=petalL*0.42;
+
+  // ── TIGE ────────────────────────────────────────────
+  const stemSegs=12;
+  const stemR=flowerSize*0.025;
+  const stemGeo=new THREE.CylinderBufferGeometry(stemR*0.6,stemR,stemH,8,stemSegs,false);
+  // Repositionner le cylindre : base en 0, sommet en stemH
+  stemGeo.translate(0,stemH/2,0);
+  const stemMat=new THREE.ShaderMaterial({
+    vertexShader:STEM_VERT,fragmentShader:STEM_FRAG,
+    uniforms:{
+      u_time:{value:0},u_grow:{value:0},u_wilt:{value:0},
+      u_seed:{value:Math.random()*10},
+      u_color:{value:col},u_alpha:{value:1.0}
+    },
+    transparent:true,side:THREE.DoubleSide
+  });
+  const stem=new THREE.Mesh(stemGeo,stemMat);
+  group.add(stem);
+
+  // ── FEUILLES ─────────────────────────────────────────
+  const leaves=[];
+  for(let li=0;li<2;li++){
+    const lAngle=Math.PI*0.5+li*Math.PI+(Math.random()-0.5)*0.4;
+    const lH=stemH*(0.3+li*0.2);
+    const lLen=petalL*1.0;
+    // Feuille = plan courbé (12×6 segments)
+    const leafGeo=new THREE.PlaneBufferGeometry(lLen*0.35,lLen,4,8);
+    // Courber la feuille
+    const lPos=leafGeo.attributes.position;
+    for(let i=0;i<lPos.count;i++){
+      const t=(lPos.getY(i)/lLen+0.5); // 0..1
+      const curve=Math.sin(t*Math.PI)*lLen*0.18;
+      lPos.setZ(i,curve);
+      lPos.setX(i,lPos.getX(i)*(1-t*0.5));
+    }
+    leafGeo.computeVertexNormals();
+    const leafMat=new THREE.MeshLambertMaterial({
+      color:new THREE.Color(0.1,0.45+velN*0.1,0.05),
+      transparent:true,opacity:0.9,side:THREE.DoubleSide
+    });
+    const leaf=new THREE.Mesh(leafGeo,leafMat);
+    leaf.position.set(
+      Math.cos(lAngle)*stemR*2,
+      lH,
+      Math.sin(lAngle)*stemR*2
+    );
+    leaf.rotation.y=lAngle;
+    leaf.rotation.z=0.4+li*0.1;
+    group.add(leaf);
+    leaves.push({mesh:leaf,mat:leafMat});
+  }
+
+  // ── GROUPE SOMMET (pétales + pistil suivent la pointe de la tige) ──
+  const tipGroup=new THREE.Group();
+  tipGroup.position.y=0; // sera mis à jour dans update()
+  group.add(tipGroup);
+
+  // ── PÉTALES ──────────────────────────────────────────
+  const pU=12, pV=16;
+  const petalMeshes=[];
+
+  for(let pi=0;pi<nPetals;pi++){
+    const angle=(pi/nPetals)*Math.PI*2;
+    
+    // Construire la géométrie du pétale manuellement (surface paramétrique)
+    const positions=[];
+    const normals=[];
+    const uvs=[];
+    const indices=[];
+
+    for(let iv=0;iv<=pV;iv++){
+      for(let iu=0;iu<=pU;iu++){
+        const u=iu/pU; // 0..1 largeur
+        const v=iv/pV; // 0..1 longueur
+
+        // Profil de largeur : ellipse, s'élargit au centre puis se referme en pointe
+        const halfW=petalW*Math.sin(v*Math.PI)*0.5;
+        const x=(u-0.5)*2*halfW;
+
+        // Profil de longueur : la tige du pétale
+        const y=v*petalL*0.15; // légère élévation à la base
+
+        // Courbure en cuillère : le pétale se recourbe vers l'avant
+        const curvature=Math.sin(v*Math.PI)*petalL*0.12;
+        const z=v*petalL - curvature*0.3;
+
+        // Légère ondulation latérale (donne du naturel)
+        const ripple=Math.sin(u*Math.PI*3+pi*0.7)*petalL*0.018*v;
+
+        positions.push(x, y+ripple, z);
+        uvs.push(u,v);
+      }
+    }
+
+    // Faces
+    for(let iv=0;iv<pV;iv++){
+      for(let iu=0;iu<pU;iu++){
+        const a=iv*(pU+1)+iu;
+        const b=a+1;
+        const c=a+(pU+1);
+        const d=c+1;
+        indices.push(a,c,b, b,c,d);
+      }
+    }
+
+    const geo=new THREE.BufferGeometry();
+    geo.setAttribute('position',new THREE.Float32BufferAttribute(positions,3));
+    geo.setAttribute('uv',new THREE.Float32BufferAttribute(uvs,2));
+    geo.setIndex(indices);
+    geo.computeVertexNormals();
+
+    const mat=new THREE.ShaderMaterial({
+      vertexShader:PETAL_VERT,fragmentShader:PETAL_FRAG,
+      uniforms:{
+        u_time:{value:0},
+        u_open:{value:0.0},
+        u_wilt:{value:0.0},
+        u_petalIdx:{value:pi},
+        u_seed:{value:Math.random()*10},
+        u_color:{value:col},
+        u_color2:{value:col2},
+        u_irid:{value:iridescence},
+        u_alpha:{value:1.0}
+      },
+      transparent:true,
+      side:THREE.DoubleSide,
+      depthWrite:false
+    });
+
+    const mesh=new THREE.Mesh(geo,mat);
+    // Placer le pétale : rotation autour de l'axe Y (angle du pétale)
+    mesh.rotation.y=angle;
+    mesh.position.y=0; // relatif au tipGroup
+    tipGroup.add(mesh);
+    petalMeshes.push(mesh);
+  }
+
+  // ── PISTIL (centre) ───────────────────────────────────
+  const pistilGeo=new THREE.SphereBufferGeometry(petalL*0.08,8,8);
+  const pistilMat=new THREE.MeshStandardMaterial({
+    color:new THREE.Color(
+      Math.min(1,r*0.5+0.6),
+      Math.min(1,g*0.3+0.5),
+      Math.min(1,b*0.1+0.1)
+    ),
+    roughness:0.3,metalness:0.1,
+    transparent:true,opacity:1.0
+  });
+  const pistil=new THREE.Mesh(pistilGeo,pistilMat);
+  pistil.position.y=0; // relatif au tipGroup
+  pistil.scale.set(1,0,1);
+  tipGroup.add(pistil);
+
+  // ── ÉTAT D'ANIMATION ──────────────────────────────────
+  // LOGIQUE :
+  //   - Pendant la note (alive=true) : tige + feuilles poussent seulement
+  //   - Au relâchement (alive=false) : pétales s'ouvrent depuis le bouton
+  //   - Staccato court = pas de fleur (growT trop faible au relâchement)
+  //   - Vélocité forte = fleur s'ouvre vite, douce = lentement
+  let growT=0;       // temps de croissance pendant la note tenue
+  let openT=0;       // ouverture des pétales après relâchement
+  let wiltT=0;       // flétrissement final
+  let alive=true;
+  let alpha=1.0;
+  const STEM_SPD=0.6;  // vitesse de pousse de la tige
+  const WILT_SPD=1.0/Math.max(trailLife,2);
+  // Vitesse d'ouverture : forte vélocité = rapide, douce = lente
+  const OPEN_SPD=0.3+velN*1.4;
+  // Seuil de growT pour qu'une fleur apparaisse (note trop courte = herbe seulement)
+  const FLOWER_THRESHOLD=0.35;
+
+  // Tout caché au départ
+  for(const l of leaves) l.mesh.visible=false;
+  for(const pm of petalMeshes) pm.visible=false;
+  pistil.visible=false;
+
+  function update(dt,t){
+    if(alive){
+      // Tige pousse continuellement
+      growT+=dt*STEM_SPD;
+    } else {
+      // Note relâchée : ouverture des pétales si la tige est assez longue
+      if(growT>=FLOWER_THRESHOLD){
+        openT=Math.min(1, openT+dt*OPEN_SPD);
+      }
+      // Puis flétrissement une fois l'ouverture maximale atteinte
+      if(openT>=1 || growT<FLOWER_THRESHOLD){
+        wiltT=Math.min(1, wiltT+dt*WILT_SPD);
+      }
+      alpha=Math.max(0, 1-Math.pow(wiltT,1.5));
+    }
+
+    const wilt=wiltT;
+    const stemProgress=growT/0.7;  // pas de plafond — pousse indéfiniment
+
+    // ── Tige ────────────────────────────────────────────
+    stemMat.uniforms.u_grow.value=stemProgress;
+    stemMat.uniforms.u_wilt.value=wilt;
+    stemMat.uniforms.u_time.value=t;
+    stemMat.uniforms.u_alpha.value=alpha;
+    // Hauteur réelle du sommet de la tige
+    const currentTip=stemH*Math.min(stemProgress,4);
+    // Le tipGroup suit exactement le sommet (pas de décalage en flétrissement ici,
+    // le shader s'occupe de courber les pétales vers le bas)
+    tipGroup.position.y=currentTip;
+
+    // ── Feuilles : apparaissent quand la tige est à mi-hauteur ──
+    const leafProgress=Math.max(0, Math.min(1, (growT-0.25)/0.4));
+    for(const l of leaves){
+      l.mesh.visible=leafProgress>0;
+      l.mat.opacity=leafProgress*alpha*0.9;
+    }
+
+    // ── Pétales : seulement après relâchement et si tige assez longue ──
+    const flowerReady=!alive && growT>=FLOWER_THRESHOLD;
+    // Ouverture : 0=bouton fermé (pointant vers haut), 1=grand ouvert
+    // On dépasse légèrement 1 pour les vélocités fortes (très épanoui)
+    const maxOpen=0.3+velN*0.85;
+    const open=flowerReady ? Math.min(maxOpen, openT*maxOpen) : 0;
+
+    for(const pm of petalMeshes){
+      pm.visible=flowerReady;
+      pm.material.uniforms.u_time.value=t;
+      pm.material.uniforms.u_open.value=open;
+      pm.material.uniforms.u_wilt.value=wilt;
+      pm.material.uniforms.u_alpha.value=alpha;
+      pm.material.uniforms.u_irid.value=iridescence;
+    }
+
+    // Pistil
+    pistil.visible=flowerReady;
+    const pistilS=openT*(0.9+Math.sin(t*2.5+noteIdx)*0.06);
+    pistil.scale.set(pistilS,pistilS*0.65,pistilS);
+    pistilMat.opacity=alpha;
+
+    // Légère oscillation (respiration)
+    const sway=Math.sin(t*0.7+noteIdx*1.7)*0.012*(1-wilt)*Math.min(1,growT);
+    group.rotation.z=sway;
+  }
+
+  function dispose(){
+    pivot.remove(group);
+    stemGeo.dispose();stemMat.dispose();
+    for(const pm of petalMeshes){pm.geometry.dispose();pm.material.dispose();}
+    pistilGeo.dispose();pistilMat.dispose();
+    for(const l of leaves){l.mesh.geometry.dispose();l.mat.dispose();}
+  }
+
+  function setAlive(v){alive=v;}
+  function getAlpha(){return alpha;}
+  function isDead(){return !alive&&alpha<=0.01;}
+
+  return{update,dispose,setAlive,getAlpha,isDead,group};
+}
+
+/* ══ PARAMS ════════════════════════════════════════════ */
+let palIdx=0;
+let spdMult=0.30,trailLife=15;
+let flowerSize=0.8;
+let flowerPetals=6;
+let iridescence=0.60;
+let rotMode='auto',rotSpd=8;
+let pedalDown=false,firstNote=false,timeX=0;
+let uiVisible=true,notePanelVisible=true;
+let formatMode='landscape';
+let camZoom=1.0,camZoomTarget=1.0,zoomPedalMax=0;
+const ZOOM_SPEED=0.04;
+
+/* ══ MIDI LEARN ════════════════════════════════════════ */
+const PARAMS={
+  spd:{slider:'spd',set(v){spdMult=v/100;document.getElementById('spd').value=v;document.getElementById('spd-v').textContent=Math.round(v)+'%';},get(){return spdMult*100;},triggerPeak:50,triggerDecay:1.5},
+  life:{slider:'life',set(v){trailLife=v;document.getElementById('life').value=v;document.getElementById('life-v').textContent=Math.round(v)+'s';},get(){return trailLife;},triggerPeak:20,triggerDecay:2.0},
+  size:{slider:'size',set(v){flowerSize=v/50;document.getElementById('size').value=v;document.getElementById('size-v').textContent=Math.round(v)+'%';},get(){return flowerSize*50;},triggerPeak:30,triggerDecay:1.5},
+  petals:{slider:'petals',set(v){flowerPetals=Math.round(v);document.getElementById('petals').value=v;document.getElementById('petals-v').textContent=Math.round(v);},get(){return flowerPetals;},triggerPeak:3,triggerDecay:2.0},
+  rotspd:{slider:'rotspd',set(v){rotSpd=v;document.getElementById('rotspd').value=v;document.getElementById('rotspd-v').textContent=Math.round(v);},get(){return rotSpd;},triggerPeak:30,triggerDecay:2.0}
+};
+let learnTarget=null,learnTimeout=null;
+const ccMappings={},noteMappings={},activePeaks={};
+
+function learnKey(type,ch,num){return `${type}_${ch}_${num}`;}
+function setLearnTarget(paramId){
+  if(learnTarget){document.getElementById('learn-'+learnTarget).classList.remove('waiting');clearTimeout(learnTimeout);}
+  if(learnTarget===paramId){learnTarget=null;return;}
+  learnTarget=paramId;
+  const btn=document.getElementById('learn-'+paramId);
+  btn.classList.add('waiting');btn.textContent='En attente…';
+  learnTimeout=setTimeout(()=>{btn.classList.remove('waiting');btn.textContent='Learn';learnTarget=null;},8000);
+}
+function applyLearnMapping(type,ch,num,paramId){
+  const key=learnKey(type,ch,num);
+  if(type==='cc') ccMappings[key]=paramId; else noteMappings[key]=paramId;
+  const btn=document.getElementById('learn-'+paramId);
+  btn.classList.remove('waiting');btn.classList.add('mapped');btn.textContent='Learn';
+  document.getElementById('info-'+paramId).textContent=type==='cc'?`CC${num} ch${ch}`:`Note${num} ch${ch}`;
+  clearTimeout(learnTimeout);learnTarget=null;saveMappings();
+}
+function clearAllMappings(){
+  Object.keys(ccMappings).forEach(k=>delete ccMappings[k]);
+  Object.keys(noteMappings).forEach(k=>delete noteMappings[k]);
+  Object.keys(PARAMS).forEach(id=>{
+    const btn=document.getElementById('learn-'+id);
+    btn.classList.remove('mapped','waiting');btn.textContent='Learn';
+    document.getElementById('info-'+id).textContent='—';
+  });
+  localStorage.removeItem('pianoFleursMidi');
+}
+function saveMappings(){localStorage.setItem('pianoFleursMidi',JSON.stringify({cc:ccMappings,note:noteMappings}));}
+function loadMappings(){
+  try{
+    const s=JSON.parse(localStorage.getItem('pianoFleursMidi')||'{}');
+    if(s.cc) Object.assign(ccMappings,s.cc);
+    if(s.note) Object.assign(noteMappings,s.note);
+    Object.entries(ccMappings).forEach(([key,paramId])=>{const[,ch,num]=key.split('_');const btn=document.getElementById('learn-'+paramId);if(btn){btn.classList.add('mapped');document.getElementById('info-'+paramId).textContent=`CC${num} ch${ch}`;}});
+    Object.entries(noteMappings).forEach(([key,paramId])=>{const[,ch,num]=key.split('_');const btn=document.getElementById('learn-'+paramId);if(btn){btn.classList.add('mapped');document.getElementById('info-'+paramId).textContent=`Note${num} ch${ch}`;}});
+  }catch(e){localStorage.removeItem('pianoFleursMidi');}
+}
+function updatePeaks(dt){
+  for(const[id,peak] of Object.entries(activePeaks)){
+    peak.value-=peak.decay*dt;
+    if(peak.value<=peak.base){peak.value=peak.base;delete activePeaks[id];}
+    PARAMS[id].set(peak.value);
+  }
+}
+
+/* ══ SYNTHÉ ════════════════════════════════════════════ */
+let audioCtx=null,masterGain=null,synthActive=true,synthVolume=0.60;
+const activeOsc=new Map();
+function getACtx(){
+  if(!audioCtx){audioCtx=new(window.AudioContext||window.webkitAudioContext)();masterGain=audioCtx.createGain();masterGain.gain.setValueAtTime(synthVolume,audioCtx.currentTime);masterGain.connect(audioCtx.destination);}
+  if(audioCtx.state==='suspended') audioCtx.resume();
+  return audioCtx;
+}
+function noteFreq(m){return 440*Math.pow(2,(m-69)/12);}
+function synthOn(note){
+  if(!synthActive||activeOsc.has(note)) return;
+  const ctx=getACtx();
+  const osc=ctx.createOscillator(),g=ctx.createGain();
+  osc.type='sine';osc.frequency.setValueAtTime(noteFreq(note),ctx.currentTime);
+  g.gain.setValueAtTime(0,ctx.currentTime);g.gain.linearRampToValueAtTime(1,ctx.currentTime+0.012);
+  osc.connect(g);g.connect(masterGain);osc.start();
+  activeOsc.set(note,{osc,gain:g});
+}
+function synthOff(note){
+  const nd=activeOsc.get(note);if(!nd)return;
+  const ctx=getACtx();
+  nd.gain.gain.cancelScheduledValues(ctx.currentTime);
+  nd.gain.gain.setValueAtTime(nd.gain.gain.value,ctx.currentTime);
+  nd.gain.gain.linearRampToValueAtTime(0,ctx.currentTime+0.035);
+  nd.osc.stop(ctx.currentTime+0.04);
+  activeOsc.delete(note);
+}
+function synthAllOff(){for(const n of [...activeOsc.keys()]) synthOff(n);}
+
+/* ══ POSITION / DIRECTION ══════════════════════════════ */
+function noteToPos3D(note,vel){
+  // Les notes graves au bas, aiguës en haut
+  const y=((note-NOTE_MIN)/(NOTE_MAX-NOTE_MIN))*6-3;
+  const velN=(vel-1)/126;
+  // Profondeur selon vélocité
+  const z=(velN-0.5)*4;
+  // X : décalage cyclique selon l'ordre d'arrivée
+  const x=Math.sin(timeX*0.09)*4.5;
+  return new THREE.Vector3(x,y,z);
+}
+
+/* ══ NOTES ACTIVES ═════════════════════════════════════ */
+const activeNotes=new Map(); // note → {flower, pos, vel, alive}
+const dyingFlowers=[];       // fleurs en train de faner
+let noteCounter=0;
+
+function spawnNote(note,vel){
+  if(activeNotes.has(note)) releaseNote(note);
+  const pal=PALETTES[palIdx];
+  const name=NOTE_NAMES[note%12];
+  const hsl=pal[name]||[0,80,60];
+  const rgb=hsl2rgb(hsl[0],hsl[1],Math.min(93,hsl[2]+Math.floor(note/12)*3));
+  const velN=(vel-1)/126;
+  const pos=noteToPos3D(note,vel);
+  timeX+=0.8+(vel/127)*1.2;
+
+  const flower=makeFlower(rgb[0],rgb[1],rgb[2],velN,noteCounter++);
+  flower.group.position.copy(pos);
+  // Légère rotation aléatoire autour de Y
+  flower.group.rotation.y=Math.random()*Math.PI*2;
+
+  activeNotes.set(note,{flower,pos,velN,alive:true,rgb});
+  synthOn(note);
+  if(!firstNote){firstNote=true;document.getElementById('hint').classList.add('gone');}
+  logNote(note,vel,rgb);
+}
+
+function releaseNote(note){
+  const b=activeNotes.get(note);
+  if(!b) return;
+  b.alive=false;
+  b.flower.setAlive(false);
+  dyingFlowers.push(b.flower);
+  activeNotes.delete(note);
+  synthOff(note);
+}
+
+// Hauteur caméra : pédale = monte au-dessus de la scène
+let camYTarget=2;  // hauteur par défaut
+let camY=2;
+
+function onPedalChange(down){
+  const was=pedalDown;pedalDown=down;
+  document.getElementById('ped-ind').classList.toggle('on',down);
+  if(down){
+    camZoomTarget=1.0+zoomPedalMax;
+    camYTarget=8+zoomPedalMax*6; // monte selon le slider zoom
+  } else {
+    camZoomTarget=1.0;
+    camYTarget=2; // redescend à la hauteur normale
+    if(was){
+      if(rotMode==='pedal') pivot.rotation.y+=Math.PI/4;
+      [...activeNotes.keys()].forEach(n=>releaseNote(n));
+    }
+  }
+}
+
+function clearAll(){
+  for(const[,b] of activeNotes){b.flower.dispose();}
+  activeNotes.clear();
+  for(const f of dyingFlowers){f.dispose();}
+  dyingFlowers.length=0;
+  synthAllOff();
+}
+
+/* ══ MODE REEL ═════════════════════════════════════════ */
+const reelOverlay=document.getElementById('reel-overlay');
+function getReelFrame(){
+  const ratio=1080/1920;
+  const winW=innerWidth,winH=innerHeight;
+  let fw,fh;
+  if(winH*ratio<=winW){fh=winH;fw=Math.round(fh*ratio);}
+  else{fw=winW;fh=Math.round(fw/ratio);}
+  return{fx:Math.round((winW-fw)/2),fy:Math.round((winH-fh)/2),fw,fh};
+}
+
+/* ══ BOUCLE ════════════════════════════════════════════ */
+const clock=new THREE.Clock();
+function animate(){
+  requestAnimationFrame(animate);
+  const dt=Math.min(0.05,clock.getDelta());
+  const t=clock.getElapsedTime();
+
+  // Zoom caméra
+  const lz=1-Math.pow(1-ZOOM_SPEED,dt*60);
+  camZoom+=(camZoomTarget-camZoom)*lz;
+  camY+=(camYTarget-camY)*lz*0.6;
+  const camDist=14/camZoom;
+  // La caméra reste sur l'axe Z (le pivot tourne, pas la caméra)
+  const camXZ=Math.sqrt(Math.max(0, camDist*camDist - camY*camY));
+  camera.position.set(0, camY, camXZ);
+  camera.lookAt(0, camY*0.3, 0);
+
+  updatePeaks(dt);
+
+  // Rotation simple autour de Y
+  if(rotMode==='auto') pivot.rotation.y+=rotSpd*0.0001*dt*60;
+
+  // Update fleurs actives
+  for(const[,b] of activeNotes){
+    b.flower.update(dt,t);
+  }
+
+  // Update fleurs en train de faner + nettoyage
+  for(let i=dyingFlowers.length-1;i>=0;i--){
+    const f=dyingFlowers[i];
+    f.update(dt,t);
+    if(f.isDead()){
+      f.dispose();
+      dyingFlowers.splice(i,1);
+    }
+  }
+
+  // Rendu
+  if(formatMode==='landscape'){
+    renderer.setViewport(0,0,innerWidth,innerHeight);
+    renderer.setScissorTest(false);
+    renderer.render(scene,camera);
+    reelOverlay.style.display='none';
+  } else {
+    const{fx,fy,fw,fh}=getReelFrame();
+    renderer.setScissorTest(true);
+    renderer.setScissor(fx,innerHeight-fy-fh,fw,fh);
+    renderer.setViewport(fx,innerHeight-fy-fh,fw,fh);
+    renderer.render(scene,camera);
+    renderer.setScissorTest(false);
+    reelOverlay.style.display='block';
+    reelOverlay.style.left=fx+'px';reelOverlay.style.top=fy+'px';
+    reelOverlay.style.width=fw+'px';reelOverlay.style.height=fh+'px';
+  }
+}
+
+/* ══ LOG ═══════════════════════════════════════════════ */
+const logEl=document.getElementById('note-log');
+function logNote(note,vel,rgb){
+  const name=NOTE_NAMES[note%12],oct=Math.floor(note/12)-1;
+  const d=document.createElement('div');d.className='nrow';
+  d.innerHTML=`<div class="nbadge" style="background:rgb(${Math.round(rgb[0]*255)},${Math.round(rgb[1]*255)},${Math.round(rgb[2]*255)})"></div><span style="color:rgba(255,255,255,.72);min-width:26px">${name}${oct}</span><span style="color:rgba(255,255,255,.32)">vel ${vel}</span>`;
+  logEl.prepend(d);if(logEl.children.length>6)logEl.removeChild(logEl.lastChild);
+}
+
+/* ══ MIDI ══════════════════════════════════════════════ */
+const midiDot=document.getElementById('midi-dot');
+const midiLbl=document.getElementById('midi-label');
+function onMidi(e){
+  const status=e.data[0],st=status&0xF0,ch=(status&0x0F)+1;
+  const b1=e.data[1],b2=e.data[2];
+  if(learnTarget){
+    if(st===0xB0&&b1!==64&&b1<=119){applyLearnMapping('cc',ch,b1,learnTarget);return;}
+    if(st===0x90&&b2>0&&ch===2){applyLearnMapping('note',ch,b1,learnTarget);return;}
+  }
+  if(st===0xB0&&b1===64){onPedalChange(b2>=64);return;}
+  if(st===0xB0){
+    const key=learnKey('cc',ch,b1);
+    if(ccMappings[key]){const id=ccMappings[key];const sl=document.getElementById(PARAMS[id].slider);PARAMS[id].set((b2/127)*(+sl.max - +sl.min)+ +sl.min);}
+    return;
+  }
+  if(ch===2){
+    if(st===0x90&&b2>0){const key=learnKey('note',ch,b1);if(noteMappings[key]){const id=noteMappings[key],p=PARAMS[id];const base=p.get();const target=Math.min(+document.getElementById(p.slider).max,base+p.triggerPeak);activePeaks[id]={value:target,decay:(target-base)/p.triggerDecay,base};}}
+    return;
+  }
+  if(st===0x90&&b2>0&&b1>=NOTE_MIN&&b1<=NOTE_MAX){spawnNote(b1,b2);return;}
+  if((st===0x80||(st===0x90&&b2===0))&&b1>=NOTE_MIN&&b1<=NOTE_MAX) releaseNote(b1);
+}
+if(navigator.requestMIDIAccess){
+  navigator.requestMIDIAccess({sysex:false}).then(midi=>{
+    midiDot.classList.add('on');midiLbl.textContent='MIDI connecté';
+    const conn=()=>{for(const i of midi.inputs.values())i.onmidimessage=onMidi;};
+    conn();midi.onstatechange=conn;
+  }).catch(()=>{midiDot.classList.add('err');midiLbl.textContent='Accès MIDI refusé';});
+}else{midiDot.classList.add('err');midiLbl.textContent='WebMIDI non supporté';}
+
+/* ══ CLAVIER ═══════════════════════════════════════════ */
+const KEYMAP={a:60,w:61,s:62,e:63,d:64,f:65,t:66,g:67,y:68,h:69,u:70,j:71,k:72,l:73};
+const held=new Set();
+window.addEventListener('keydown',e=>{
+  if(e.repeat)return;
+  if(e.key===' '){e.preventDefault();onPedalChange(true);return;}
+  if(e.key==='c'||e.key==='C'){clearAll();return;}
+  if(e.key==='H'){uiVisible=!uiVisible;document.getElementById('ui').classList.toggle('hidden',!uiVisible);document.getElementById('hide-hint').style.opacity=uiVisible?'0.2':'0';return;}
+  if(e.key==='N'||e.key==='n'){notePanelVisible=!notePanelVisible;document.getElementById('note-panel').classList.toggle('hidden',!notePanelVisible);return;}
+  if(e.key==='p'||e.key==='P'){doCapture();return;}
+  const n=KEYMAP[e.key.toLowerCase()];
+  if(n&&!held.has(e.key)){held.add(e.key);spawnNote(n,Math.floor(45+Math.random()*75));}
+});
+window.addEventListener('keyup',e=>{
+  if(e.key===' '){onPedalChange(false);return;}
+  const n=KEYMAP[e.key.toLowerCase()];
+  if(n){held.delete(e.key);releaseNote(n);}
+});
+
+/* ══ CONTRÔLES ══════════════════════════════════════════ */
+function bind(id,cb){document.getElementById(id).addEventListener('input',cb);}
+function bindC(id,cb){document.getElementById(id).addEventListener('change',cb);}
+
+bind('spd',e=>{spdMult=+e.target.value/100;document.getElementById('spd-v').textContent=e.target.value+'%';});
+bind('size',e=>{flowerSize=+e.target.value/50;document.getElementById('size-v').textContent=e.target.value+'%';});
+bind('petals',e=>{flowerPetals=+e.target.value;document.getElementById('petals-v').textContent=e.target.value;});
+bind('life',e=>{trailLife=+e.target.value;document.getElementById('life-v').textContent=e.target.value+'s';});
+bind('irid',e=>{iridescence=+e.target.value/100;document.getElementById('irid-v').textContent=e.target.value+'%';});
+bind('rotspd',e=>{rotSpd=+e.target.value;document.getElementById('rotspd-v').textContent=e.target.value;});
+bind('zoom-ped',e=>{zoomPedalMax=(+e.target.value/100)*0.5;document.getElementById('zoom-ped-v').textContent=Math.round(+e.target.value)+'%';});
+bind('synth-vol',e=>{synthVolume=+e.target.value/100;document.getElementById('synth-vol-v').textContent=e.target.value+'%';if(masterGain)masterGain.gain.setValueAtTime(synthVolume,audioCtx.currentTime);});
+
+document.getElementById('btn-synth-on').addEventListener('click',()=>{synthActive=true;document.getElementById('btn-synth-on').classList.add('active');document.getElementById('btn-synth-off').classList.remove('active');});
+document.getElementById('btn-synth-off').addEventListener('click',()=>{synthActive=false;synthAllOff();document.getElementById('btn-synth-off').classList.add('active');document.getElementById('btn-synth-on').classList.remove('active');});
+
+bindC('pal-sel',e=>{palIdx=+e.target.value;});
+bindC('bg-sel',e=>{
+  const c=e.target.value.split(',').map(Number);
+  scene.background=new THREE.Color(c[0],c[1],c[2]);
+  scene.fog.color.setRGB(c[0],c[1],c[2]);
+});
+bindC('rot-sel',e=>{rotMode=e.target.value;});
+bindC('res-sel',e=>{
+  const res=+e.target.value;
+  const ratio=res/Math.min(innerWidth,innerHeight);
+  renderer.setPixelRatio(Math.min(ratio,devicePixelRatio*2));
+  renderer.setSize(innerWidth,innerHeight);
+});
+
+document.getElementById('btn-landscape').addEventListener('click',()=>{formatMode='landscape';document.getElementById('btn-landscape').classList.add('active');document.getElementById('btn-reel').classList.remove('active');});
+document.getElementById('btn-reel').addEventListener('click',()=>{formatMode='reel';document.getElementById('btn-reel').classList.add('active');document.getElementById('btn-landscape').classList.remove('active');});
+
+document.getElementById('pal-file').addEventListener('change',e=>{
+  const file=e.target.files[0];if(!file)return;
+  const reader=new FileReader();
+  reader.onload=ev=>{
+    try{
+      const lines=ev.target.result.trim().split('\n');
+      const headers=lines[0].split('\t').map(s=>s.trim());
+      const iPal=headers.indexOf('palette'),iNote=headers.indexOf('note'),iH=headers.indexOf('H'),iS=headers.indexOf('S'),iL=headers.indexOf('L');
+      if(iPal<0||iNote<0||iH<0||iS<0||iL<0){document.getElementById('pal-loaded').textContent='Format invalide';return;}
+      const pals={};
+      for(let i=1;i<lines.length;i++){const cols=lines[i].split('\t');if(cols.length<Math.max(iPal,iNote,iH,iS,iL)+1)continue;const pal=cols[iPal].trim(),note=cols[iNote].trim();const h=parseFloat(cols[iH]),s=parseFloat(cols[iS]),l=parseFloat(cols[iL]);if(!pals[pal])pals[pal]={};pals[pal][note]=[h,s,l];}
+      const palNames=Object.keys(pals);if(!palNames.length){document.getElementById('pal-loaded').textContent='Vide';return;}
+      PALETTES.length=0;const sel=document.getElementById('pal-sel');sel.innerHTML='';
+      palNames.forEach((name,i)=>{PALETTES.push(pals[name]);const opt=document.createElement('option');opt.value=i;opt.textContent=name;sel.appendChild(opt);});
+      palIdx=0;document.getElementById('pal-loaded').textContent=palNames.length+' palettes';
+    }catch(err){document.getElementById('pal-loaded').textContent='Erreur';console.error(err);}
+  };reader.readAsText(file);
+});
+
+Object.keys(PARAMS).forEach(id=>{document.getElementById('learn-'+id).addEventListener('click',()=>setLearnTarget(id));});
+document.getElementById('learn-clear').addEventListener('click',clearAllMappings);
+loadMappings();
+
+let learnOpen=false;
+document.getElementById('learn-toggle').addEventListener('click',()=>{
+  learnOpen=!learnOpen;
+  document.getElementById('learn-body').classList.toggle('collapsed',!learnOpen);
+  document.getElementById('learn-chevron').classList.toggle('open',learnOpen);
+});
+
+// Panneau notes draggable
+const notePanel=document.getElementById('note-panel');
+let dragActive=false,dragOX=0,dragOY=0;
+notePanel.addEventListener('mousedown',ev=>{dragActive=true;dragOX=ev.clientX-notePanel.getBoundingClientRect().left;dragOY=ev.clientY-notePanel.getBoundingClientRect().top;notePanel.style.transition='none';notePanel.style.right='auto';notePanel.style.bottom='auto';ev.preventDefault();});
+window.addEventListener('mousemove',ev=>{if(!dragActive)return;notePanel.style.left=(ev.clientX-dragOX)+'px';notePanel.style.top=(ev.clientY-dragOY)+'px';});
+window.addEventListener('mouseup',()=>{dragActive=false;notePanel.style.transition='opacity .4s';});
+
+/* ══ CAPTURE ═══════════════════════════════════════════ */
+function doCapture(){
+  if(formatMode==='landscape'){
+    renderer.setScissorTest(false);
+    renderer.setViewport(0,0,innerWidth,innerHeight);
+    renderer.render(scene,camera);
+    renderer.domElement.toBlob(blob=>{
+      const a=document.createElement('a');a.href=URL.createObjectURL(blob);
+      a.download='piano-fleurs-'+Date.now()+'.png';a.click();
+    });
+  } else {
+    const RW=1080,RH=1920;
+    const rt=new THREE.WebGLRenderTarget(RW,RH);
+    const prevAspect=camera.aspect;
+    camera.aspect=RW/RH;camera.updateProjectionMatrix();
+    renderer.setRenderTarget(rt);
+    renderer.setClearColor(scene.background,1);
+    renderer.clear();renderer.render(scene,camera);
+    renderer.setRenderTarget(null);
+    camera.aspect=prevAspect;camera.updateProjectionMatrix();
+    const pixels=new Uint8Array(RW*RH*4);
+    renderer.readRenderTargetPixels(rt,0,0,RW,RH,pixels);
+    rt.dispose();
+    const tmp=document.createElement('canvas');tmp.width=RW;tmp.height=RH;
+    const ctx=tmp.getContext('2d');
+    const imgData=ctx.createImageData(RW,RH);
+    for(let y=0;y<RH;y++){const srcRow=(RH-1-y)*RW*4;imgData.data.set(pixels.subarray(srcRow,srcRow+RW*4),y*RW*4);}
+    ctx.putImageData(imgData,0,0);
+    tmp.toBlob(blob=>{const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='piano-fleurs-reel-'+Date.now()+'.png';a.click();});
+  }
+}
+
+window.addEventListener('resize',()=>{
+  camera.aspect=innerWidth/innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth,innerHeight);
+});
+
+animate();
+</script>
+</body>
+</html>
